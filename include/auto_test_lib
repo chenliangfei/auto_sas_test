@@ -1,0 +1,152 @@
+#!/bin/bash
+# 
+# Shared shell library for test management 
+# 
+# Copyright (C) 2016 - 2020, chenliangfei Limited. 
+# 
+# This program is free software; you can redistribute it and/or 
+# modify it under the terms of the GNU General Public License 
+# as published by the Free Software Foundation; either version 2 
+# of the License, or (at your option) any later version. 
+# 
+# This program is distributed in the hope that it will be useful, 
+# but WITHOUT ANY WARRANTY; without even the implied warranty of 
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the 
+# GNU General Public License for more details. 
+# 
+# You should have received a copy of the GNU General Public License 
+# along with this program; if not, write to the Free Software 
+# Foundation, Inc.,Shenzhen, China
+# 
+# Author: chenliangfei <liangfei2015@foxmail.com> 
+
+
+## configuration item.
+#
+# config file
+#CONFIG_INFO="config/auto_sas_test.ini"
+
+# FIO tools config file
+FIO_CONFIG="config/fio.conf"
+
+# log file
+INFO_LOG="log/auto_sas_test.log"
+ERROR_INFO="log/error_info.log"
+
+# Test case name
+cases_arrary=(
+[1]="key_words_query"       [2]="disk_negotiated_link_rate_query"      [3]="hard_reset"                    [4]="link_reset" 
+[5]="inquire_open_phy_info" [6]="fio_run_close_all_phy"                [7]="fio_run_enable_disk"           [8]="runing_fio_link_reset"
+[9]="runing_fio_hard_reset" [10]="run_business_repeatedly_disk_enable" [11]="file_transfer_stability_test" [12]="fio_loop_run"
+[13]="fio_long_time_run"    [14]="reset_link_loop"                     [15]="fio_run_phy_frequently_flash" [16]="disk_data_comprehensive_test"
+)
+
+# phy path
+PHY_FILE_PATH="/sys/class/sas_phy"
+
+# D03 phy address
+PHY_ADDR_VALUE=(
+"0xa2002000" "0xa2002400" 
+"0xa2002800" "0xa2002c00" 
+"0xa2003000" "0xa2003400" 
+"0xa2003800" "0xa2003c00"
+)
+
+# fio tools IO size
+FIO_BS=("4M" "4K" "512K" "512B")
+
+# fio tools IO Read and write mode
+FIO_RW=("randread" "randwrite" "read" "write" "randrw")
+
+# FIO tool running time,Default is 600s.
+FIO_RUN_TIME=600
+
+# FIO tool long run time,Default is 28800s.
+FIO_LONG_RUN_TIME=28800
+
+# disk negotiated link rate query
+# negotiated link rate value, Multiple please use the symbol "|" split, Default Value is '6|12', Unit: Gbit.
+DISK_NEGOTIATED_LINKRATE_VALUE='6|12'
+
+# The FIO tool loops through the disk read and write
+# The number of cycles to execute the FIO tool,Default is 500 times.
+FIO_LOOP_RUN_MORE=500
+# The FIO tool loops through the disk read and write time,Default is 60s.
+FIO_LOOP_RUN_TIME=60
+
+## Utility function
+#
+function fail_test()
+{
+    local reason="$1"
+    printf "%s: %s - %s\n" "${TEST}" "FAIL" "${reason}"
+}
+
+#
+function pass_test()
+{
+    printf "%s: %s\n" "${TEST}" "PASS"
+}
+
+#
+function fdisk_query() 
+{
+    disk_info=`fdisk -l 2>/dev/null`
+    if [ x"$disk_info" == x"" ]
+    then
+        #fail_test "Use the \"fdisk -l\" command to query disk failure."
+        return 1
+    fi
+    return 0
+}
+
+#
+function close_all_phy()
+{
+    for addr in "${PHY_ADDR_VALUE[@]}"
+    do
+       devmem2 $addr w 0x06 1>/dev/null 2>&1
+    done
+}
+
+# open all phy
+function open_all_phy()
+{
+    for addr in "${PHY_ADDR_VALUE[@]}"
+    do
+        devmem2 $addr w 0x07 1>/dev/null 2>&1
+    done
+}
+
+#
+function change_sas_phy_file()
+{
+    for dir in `ls ${PHY_FILE_PATH}`
+    do
+        str=`cat ${PHY_FILE_PATH}/${dir}/device_type`
+        if [ x"$str" == x"end device" ]
+        then
+            echo $1 > ${PHY_FILE_PATH}/${dir}/$2
+        fi
+    done
+}
+
+# Automatic disk partition
+function dev_partition()
+{
+fdisk $1 << EOF
+n
+p
+
+
++50G
+n
+p
+
+
++50G
+w
+EOF
+}
+
+
